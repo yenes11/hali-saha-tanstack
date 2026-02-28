@@ -73,7 +73,11 @@ export default function KanbanBoard() {
   const getTeamPlayers = (team: Team) => players.filter((p) => p.team === team)
 
   const addPlayer = async (name: string) => {
-    if (players.length >= MAX_PLAYERS) return
+    const { data: existing } = await supabase
+      .from('players')
+      .select('id')
+    if ((existing?.length ?? 0) >= MAX_PLAYERS) return
+
     const tempId = -Date.now()
     const optimisticPlayer: Player = {
       id: tempId,
