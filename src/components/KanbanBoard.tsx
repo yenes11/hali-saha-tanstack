@@ -17,7 +17,7 @@ import PlayerCard from './PlayerCard'
 import PlayerInput from './PlayerInput'
 import { supabase, type Player, type Team } from '../lib/supabase'
 
-const MAX_PLAYERS = 14
+const MAX_PLAYERS = 16
 
 const COLUMNS: { team: Team; title: string; color: string }[] = [
   { team: 'unassigned', title: 'Atanmamış', color: '#a3a3a3' },
@@ -73,9 +73,7 @@ export default function KanbanBoard() {
   const getTeamPlayers = (team: Team) => players.filter((p) => p.team === team)
 
   const addPlayer = async (name: string) => {
-    const { data: existing } = await supabase
-      .from('players')
-      .select('id')
+    const { data: existing } = await supabase.from('players').select('id')
     if ((existing?.length ?? 0) >= MAX_PLAYERS) return
 
     const tempId = -Date.now()
