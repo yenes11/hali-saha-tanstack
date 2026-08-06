@@ -15,7 +15,16 @@ import { arrayMove, sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import TeamColumn from './TeamColumn'
 import PlayerCard from './PlayerCard'
 import PlayerInput from './PlayerInput'
-import { supabase, type Player, type Team } from '../lib/supabase'
+import MatchInfoBar from './MatchInfoBar'
+import {
+  getPlayers as getPlayersFn,
+  addPlayer as addPlayerFn,
+  updatePlayerTeam as updatePlayerTeamFn,
+  deletePlayer as deletePlayerFn,
+  deleteTeam as deleteTeamFn,
+  type Player,
+  type Team,
+} from '../lib/players'
 
 const MAX_PLAYERS = 16
 
@@ -41,24 +50,13 @@ export default function KanbanBoard() {
   const fetchPlayers = useCallback(async () => {
     setError(null)
     try {
-      const { data, error } = await supabase
-        .from('players')
-        .select('*')
-        .order('created_at', { ascending: true })
-
-      if (error) {
-        setError(error.message ?? 'Veritabanı hatası')
-        setPlayers([])
-        return
-      }
-      setPlayers(data ?? [])
+      const data = await getPlayersFn()
+      setPlayers(data)
     } catch (e) {
       const msg =
-        e instanceof TypeError && e.message.includes('fetch')
-          ? "Supabase'e bağlanılamadı. .env dosyasını kontrol edin, Supabase projenizin aktif olduğundan emin olun ve players tablosunu oluşturun."
-          : e instanceof Error
-            ? e.message
-            : 'Beklenmeyen hata'
+        e instanceof Error
+          ? e.message
+          : "Neon'a bağlanılamadı. .env dosyasındaki DATABASE_URL'i kontrol edin, Neon projenizin aktif olduğundan emin olun ve players tablosunu oluşturun."
       setError(msg)
       setPlayers([])
     } finally {
@@ -73,8 +71,7 @@ export default function KanbanBoard() {
   const getTeamPlayers = (team: Team) => players.filter((p) => p.team === team)
 
   const addPlayer = async (name: string) => {
-    const { data: existing } = await supabase.from('players').select('id')
-    if ((existing?.length ?? 0) >= MAX_PLAYERS) return
+    if (players.length >= MAX_PLAYERS) return
 
     const tempId = -Date.now()
     const optimisticPlayer: Player = {
@@ -85,18 +82,13 @@ export default function KanbanBoard() {
     }
     setPlayers((prev) => [...prev, optimisticPlayer])
 
-    const { data, error } = await supabase
-      .from('players')
-      .insert({ name, team: 'unassigned' })
-      .select()
-      .single()
-
-    if (error) {
+    try {
+      const player = await addPlayerFn({ data: { name } })
+      setPlayers((prev) => prev.map((p) => (p.id === tempId ? player : p)))
+    } catch (e) {
       setPlayers((prev) => prev.filter((p) => p.id !== tempId))
-      console.error('Oyuncu eklenirken hata:', error)
-      return
+      console.error('Oyuncu eklenirken hata:', e)
     }
-    setPlayers((prev) => prev.map((p) => (p.id === tempId ? data : p)))
   }
 
   const moveToTeam = async (playerId: number, team: Team) => {
@@ -104,13 +96,10 @@ export default function KanbanBoard() {
       prev.map((p) => (p.id === playerId ? { ...p, team } : p)),
     )
 
-    const { error } = await supabase
-      .from('players')
-      .update({ team })
-      .eq('id', playerId)
-
-    if (error) {
-      console.error('Oyuncu taşınırken hata:', error)
+    try {
+      await updatePlayerTeamFn({ data: { playerId, team } })
+    } catch (e) {
+      console.error('Oyuncu taşınırken hata:', e)
       fetchPlayers()
     }
   }
@@ -118,10 +107,10 @@ export default function KanbanBoard() {
   const deletePlayer = async (playerId: number) => {
     setPlayers((prev) => prev.filter((p) => p.id !== playerId))
 
-    const { error } = await supabase.from('players').delete().eq('id', playerId)
-
-    if (error) {
-      console.error('Oyuncu silinirken hata:', error)
+    try {
+      await deletePlayerFn({ data: { playerId } })
+    } catch (e) {
+      console.error('Oyuncu silinirken hata:', e)
       fetchPlayers()
     }
   }
@@ -132,10 +121,10 @@ export default function KanbanBoard() {
 
     setPlayers((prev) => prev.filter((p) => p.team !== team))
 
-    const { error } = await supabase.from('players').delete().eq('team', team)
-
-    if (error) {
-      console.error('Takım temizlenirken hata:', error)
+    try {
+      await deleteTeamFn({ data: { team } })
+    } catch (e) {
+      console.error('Takım temizlenirken hata:', e)
       fetchPlayers()
     }
   }
@@ -182,11 +171,13 @@ export default function KanbanBoard() {
     if (overIsColumn) {
       const targetTeam = over.id as Team
       if (currentTeam !== targetTeam) {
-        const { error } = await supabase
-          .from('players')
-          .update({ team: targetTeam })
-          .eq('id', activePlayerId)
-        if (error) fetchPlayers()
+        try {
+          await updatePlayerTeamFn({
+            data: { playerId: activePlayerId, team: targetTeam },
+          })
+        } catch {
+          fetchPlayers()
+        }
       }
       return
     }
@@ -208,11 +199,13 @@ export default function KanbanBoard() {
     }
 
     if (currentTeam !== overPlayerTeam && overPlayerTeam) {
-      const { error } = await supabase
-        .from('players')
-        .update({ team: overPlayerTeam })
-        .eq('id', activePlayerId)
-      if (error) fetchPlayers()
+      try {
+        await updatePlayerTeamFn({
+          data: { playerId: activePlayerId, team: overPlayerTeam },
+        })
+      } catch {
+        fetchPlayers()
+      }
     }
   }
 
@@ -235,7 +228,7 @@ export default function KanbanBoard() {
           </h2>
           <p className="mb-4 text-sm text-text-muted">{error}</p>
           <p className="mb-4 text-xs text-text-muted">
-            Supabase Dashboard → SQL Editor üzerinden players tablosunu
+            Neon Console → SQL Editor üzerinden players tablosunu
             oluşturduğunuzdan emin olun. Proje duraklatılmışsa yeniden başlatın.
           </p>
           <button
@@ -255,7 +248,7 @@ export default function KanbanBoard() {
 
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-6">
-      <div className="mb-6 text-center">
+      <div className="text-center">
         <h1 className="text-2xl font-bold tracking-tight text-text sm:text-3xl">
           Halı Saha Kadro
         </h1>
@@ -264,10 +257,9 @@ export default function KanbanBoard() {
           <span className="font-bold text-text">{players.length}</span>/
           {MAX_PLAYERS}
         </span>
-        <p className="text-sm text-text-muted">
-          Oyuncuları ekle, takımlara dağıt, sürükle-bırak ile sırala
-        </p>
       </div>
+
+      <MatchInfoBar />
 
       <div className="mx-auto mb-6 max-w-md">
         <PlayerInput

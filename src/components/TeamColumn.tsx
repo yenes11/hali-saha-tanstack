@@ -2,7 +2,7 @@ import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { useDroppable } from '@dnd-kit/core'
 import { Trash2, Users } from 'lucide-react'
 import PlayerCard from './PlayerCard'
-import type { Player, Team } from '../lib/supabase'
+import type { Player, Team } from '../lib/players'
 
 interface TeamColumnProps {
   team: Team

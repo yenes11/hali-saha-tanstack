@@ -1,7 +1,7 @@
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { GripVertical, Trash2, ArrowRight } from 'lucide-react'
-import type { Player, Team } from '../lib/supabase'
+import type { Player, Team } from '../lib/players'
 
 interface PlayerCardProps {
   player: Player
